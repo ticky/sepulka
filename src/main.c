@@ -58,7 +58,7 @@
 #define ENABLE_LOGGING
 //#define ENABLE_LOGGING_ALL //Must be defined after ENABLE_LOGGING
 
-#define TITLE_STRING "Sepulka v0.7b [PGC Edition] by C4TurD4Y"
+#define TITLE_STRING "Sepulka v0.7c [PGC Edition] by C4TurD4Y"
 #define INFO_STRING  "Check out PSP Genesis Competition 2011 at http://wololo.net/genesis/"
 
 #define runSepulkaTxt() runModuleList("ms0:/seplugins/sepulka.txt", 0)
@@ -596,7 +596,7 @@ int knownSignsOnly(char * str)
     for(;foo+shift < bar; foo++)
     {
         //a-z; A-Z; 0-9; |; ~; (; );
-        while (!(((str[foo+shift] >= 0x30) && (str[foo+shift] <= 0x39)) || ((str[foo+shift] >= 0x41) && (str[foo+shift] <= 0x5A)) || ((str[foo+shift] >= 0x61) && (str[foo+shift] <= 0x7A)) || (str[foo+shift] == 0x7C) || (str[foo+shift] == 0x7E) || (str[foo+shift] == 0x28) || (str[foo+shift] == 0x29)) && (foo+shift < bar))
+        while (!(((str[foo+shift] >= 0x30) && (str[foo+shift] <= 0x39)) || ((str[foo+shift] >= 0x41) && (str[foo+shift] <= 0x5A)) || ((str[foo+shift] >= 0x61) && (str[foo+shift] <= 0x7A)) || (str[foo+shift] == 0x7E) || (str[foo+shift] == 0x28) || (str[foo+shift] == 0x29)) && (foo+shift < bar))
         {
             if (foo+shift == bar-1)
             {
@@ -608,7 +608,7 @@ int knownSignsOnly(char * str)
             shift++;
         }
         //if (str[foo+shift] == 0) break;
-        if (str[foo+shift] == 0x7C) spam++;
+        //if (str[foo+shift] == 0x7C) spam++;
         str[foo] = str[foo+shift];
        // if (shift > 0) str[foo+shift] = 0;
     }
@@ -616,15 +616,24 @@ int knownSignsOnly(char * str)
     return spam;
 }
 
+int getArgsNum(char * str)
+{
+    int foo = 0;
+    int bar = strlen(str);
+    int spam = 1;
+    for(;foo < bar; foo++)
+    {
+        if (str[foo] == 0x7C) spam++;
+    }
+    return spam;
+}
+
+
 int runPlugin(const char * path, char * attrs, int pmode)
 {
     int foo;
-    if ((strchr(attrs, '|') == NULL) && (strchr(attrs, ':') != NULL) && (strchr(attrs, '/') != NULL || strchr(attrs, '\\') != NULL)) foo = -1;
-    else
-    {
-        foo = knownSignsOnly(attrs);
-        makeSmall(attrs);
-    }
+    foo = getArgsNum(attrs);
+    makeSmall(attrs);
     int bar = 0;
     char arg[256];
     memset(arg, 0, sizeof(arg));
@@ -642,33 +651,26 @@ int runPlugin(const char * path, char * attrs, int pmode)
 
     int banan = 0;
 
-    if (foo > 0)
+    for(bar = 0;bar < foo;bar++)
     {
-        for(bar = 0;bar < foo;bar++)
+        memset(arg, 0, sizeof(arg));
+        pch2 = strchr(pch+1, 0x7C);
+        if (pch2 != NULL) arglen = pch2-pch;
+        else (arglen = strlen(attrs)-(pch-attrs));
+        memcpy(arg, pch, arglen);
+        pch = pch2+1;
+        spam = checkPlugin(arg);
+        if (spam == 1)
         {
-            memset(arg, 0, sizeof(arg));
-            pch2 = strchr(pch+1, 0x7C);
-            if (pch2 != NULL) arglen = pch2-pch;
-            else (arglen = strlen(attrs)-(pch-attrs));
-            memcpy(arg, pch, arglen);
-            pch = pch2+1;
-            spam = checkPlugin(arg);
-            if (spam == 1)
-            {
-                banan = 1;
-            }
-            if (spam == -1)
-            {
-                banan = 0;
-                break;
-            }
+            banan = 1;
         }
-    } else
-    {
-        makeSmall(attrs);
-        if (strncmp(path_to_file, attrs, strlen(path_to_file)) != 0) return banan;
-        banan = 1;
+        if (spam == -1)
+        {
+            banan = 0;
+            break;
+        }
     }
+
     if (banan == 1)
     {
         if (pmode == RML_ISODRV)
@@ -872,11 +874,18 @@ int checkPlugin(const char * attr)
 {
     char * arg = (char *)attr;
     int foo = 1;
+    int bar;
+    for (; arg[0] == 0x20; arg++);
+    bar = strlen(arg);
+    for (foo = 1; arg[bar-foo] == 0x20; foo++) arg[bar-foo] = 0x0;
+    foo = 1;
     if (arg[0] == 0x7E)
     {
         arg++;
         foo = -1;
     }
+    if (!strncmp(arg, path_to_file, strlen(arg))) return foo;
+    knownSignsOnly(arg);
 
     int modeOK = foo;
 
@@ -1048,9 +1057,28 @@ int startup(SceSize args, void *argp)
 
     getMacros();
 
-    if (mode == isoMode) runModuleList("ms0:/seplugins/sepulka.txt", RML_ISODRV);
+/*#ifdef ENABLE_LOGGING
+    if (!disable_filelog)
+    {
+        while (!sceKernelFindModuleByName ("sceKernelLibrary"))
+        {
+            sceKernelDelayThread (150000);
+        }
 
-    changeTimeStamp();
+        pspDebugScreenInitEx (0x44000000, 0, 0);
+        unsigned int uiAddress = 0;
+        unsigned int uiBufferWidth = 0;
+        unsigned int uiPixelFormat = 0;
+        unsigned int uiSync = 0;
+        sceDisplayGetFrameBufferInternal (0, &uiAddress, &uiBufferWidth, &uiPixelFormat, &uiSync);
+        sceDisplayGetMode (&uiPixelFormat, &uiBufferWidth, &uiBufferWidth);
+        pspDebugScreenSetColorMode (uiPixelFormat);
+        pspDebugScreenSetXY (0, 0);
+        pspDebugScreenSetTextColor (0xFF0000FF);
+    }
+#endif*/
+
+    if (mode == isoMode) runModuleList("ms0:/seplugins/sepulka.txt", RML_ISODRV);
 
     int foo = patchUmd();
 
