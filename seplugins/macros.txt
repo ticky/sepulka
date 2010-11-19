@@ -1,0 +1,51 @@
+#Sepulka's Macros - Example by C4TurD4Y  #
+##########################################
+#Structure of Sepulka's macro is very simple, first is game title (w/o spaces,
+#in this example i replaced it with '_' sign for better readabillity), followed
+#by a space and macro string. End of macro is new line sign (it can be LF, CRLF or CR).
+#Sepulka can handle up to 256 macros, next ones will be ignored.
+#Macros are case-insensitive, so u can write it as you wish.
+
+
+#+-----------GAME NAME---------------+--MACRO--+
+#Grand Theft Auto series
+Grand_Theft_Auto_Liberty_City_Stories GTA: LCS
+Grand_Theft_Auto_Vice_City_Stories    GTA: VCS
+Grand_Theft_Auto_ChinatownWars        GTA: CW
+
+#Tekken Dark Resurresction nicknames
+Tekken_Dark_Resurrection              TDR
+Tekken_Dark_Resurrection              Tekken
+Tekken_Dark_Resurrection              Tekken: DR
+Tekken_Dark_Resurrection              Tekken 5
+Tekken_Dark_Resurrection              Iron Fist
+#If you write "Tekken" like this, you suck :(
+Tekken_Dark_Resurrection              Teken
+
+#God of War series
+God_of_War_Chains_of_Olympus          GoW:CoO
+God_of_War_Chains_of_Olympus          GoW
+God_of_War_Ghost_of_Sparta            GoW:GoS
+God_of_War_Ghost_of_Sparta            GoW
+
+#ModNation Racers
+ModNation_Racers                      MNR
+
+#Motorstorm: Arctic Edge (one of the best PSP games EVER!!!)
+Motorstorm_Arctic_Edge                M: AE
+Motorstorm_Arctic_Edge                MS: AE
+Motorstorm_Arctic_Edge                Motorstorm
+Motorstorm_Arctic_Edge                MS
+
+#Silent Hill Origins
+Silent_Hill_Origins                   SH: O
+Silent_Hill_Origins                   SH: Origins
+Silent_Hill_Origins                   SH
+
+#Game IDs and modes can be macred too!
+ISO				      Backup
+PBP                                   Homebrew
+UMD                                   Disc
+UCES-00304                            Loco Roco EU
+
+##ADD YOUR MACROS HERE OR ERASE THIS FILE AND MAKE YOUR OWN!##

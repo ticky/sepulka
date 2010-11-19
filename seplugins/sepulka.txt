@@ -1,0 +1,71 @@
+#Sepulka.txt file - example by C4TurD4Y#
+########################################
+#Anything you type here is case-insensitive
+#and spaces are ignored after first word,
+#so you can write LiKE tH iS.
+########################################
+#If you are using PSPgo, you can use ef0:
+#instead of ms0:
+########################################
+#Settings:                             #
+#if you want to disable something, change "on" to "off"
+
+#Last played homebrew/iso will be displayed on first place in XMB
+autosort on
+#Ex: autosort off - sorting will be disabled
+
+#If you really like to use bootscreen type "bootscreen on"
+bootscreen off
+#bootscreen on
+#It's disabled by default because it doesn't look cool
+
+#An alternative to bootscreen. All steps done by sepulka are reported to log.txt on root of ms0:
+filelog off
+#filelog on
+#It's disabled by default because it isn't very useful in usual game playing.
+
+#######################################
+#Plugins and game titles/id:          #
+#Tip: if you want to disable something, add '#' sign at the line beginning
+#
+#Syntax:
+# - first goes FULL path to your plugin (w/o spaces), followed by space and parameters divorced by '|' sign
+# - parameters are:
+#   - games' IDs
+#   - games' titles (only latin)
+#   - macro (see "macros.txt")
+#   - and special: path to your game, it can be incomplete, it can contain spaces, but remember: if you add path to game, it must be stand-alone (no more parameters).
+# - if you add '~' sign before parameter, it won't load plugin for this game
+# - if you add '(mode)' before parameter (but after '~' sign) it will work for that game only in specified mode
+# - modes are: UMD - disc games; ISO - all backups (cso and iso); PBP - homebrew and PSS games
+# - modes can be stand-alone
+# - comment: start line by '#'
+
+#Always load RemoteJoyLite, excluding disc version of GoW:CoO
+ms0:/seplugins/remotejoylite.prx UMD | ISO | PBP | ~(umd)God of War: Chains of Olympus
+
+#Load m33_620.prx to add PSP-450 support only for Invizimals and Go!Fall
+ms0:/seplugins/m33_620.prx       InviZimals | Go!Fall
+
+#Always load that plugin:
+ms0:/seplugins/always.prx        ISO | UMD | PBP
+
+#Loads plugin only for UMD version of M:AE
+ms0:/seplugins/stargate.prx      (UMD)Motorstorm: Arctic Edge
+
+#Loads plugin for that game (ONE PATH PER LINE):
+ms0:/seplugins/plugin.prx        ms0:/ISO/my_backup.iso
+
+#Loads another plugin for all homebrews in /PSP/GAME
+ms0:/seplugins/anotherplugin.prx ms0:/PSP/GAME/
+
+#Changing iso mode for Motorstorm: AE
+m33driver Motorstorm: Arctic Edge
+
+#Changing clock for everything except GoWs
+cpu222 ISO|PBP|UMD|~God of War: Ghost of Sparta|~God of War: Chains of Olympus
+cpu333 GoW:GoS|GoW:CoO
+#Yeah, it's a macro from macros.txt
+
+
+##ADD YOUR PLUGINS HERE OR ERASE THIS FILE AND MAKE YOUR OWN!##
