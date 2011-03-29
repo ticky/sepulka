@@ -44,19 +44,11 @@ filelog off
 #Always load RemoteJoyLite, excluding disc version of GoW:CoO
 ms0:/seplugins/remotejoylite.prx UMD | ISO | PBP | ~(umd)God of War: Chains of Olympus
 
-#Load m33_620.prx to add PSP-450 support only for Invizimals and Go!Fall
-ms0:/seplugins/m33_620.prx       InviZimals | Go!Fall
-
 #Always load that plugin:
 ms0:/seplugins/always.prx        ISO | UMD | PBP
 
-#Loads plugin only for UMD version of M:AE
-ms0:/seplugins/stargate.prx      (UMD)Motorstorm: Arctic Edge
-
 #Loads plugin for games defined by the path
 ms0:/seplugins/plugin.prx        ms0:/ISO/my_backup.iso
-#Now paths can be used like normal parameter!
-ms0:/seplugins/stargate.prx      ms0:/ISO/motorstorm.iso | Fat Princess: Fistful of Cake
 ms0:/seplugins/macrofire.prx     ISO | ~ms0:/ISO/motorstorm.iso
 
 #Loads another plugin for all homebrews in /PSP/GAME
@@ -69,6 +61,15 @@ m33driver Motorstorm: Arctic Edge
 cpu222 ISO|PBP|UMD|~God of War: Ghost of Sparta|~God of War: Chains of Olympus
 cpu333 GoW:GoS|GoW:CoO
 #Yeah, it's a macro from macros.txt
+
+
+#The most important plugins (like JIT decrypters) should be at the end of the file.
+#Load m33_620.prx to add PSP-450 support only for Invizimals and Go!Fall
+ms0:/seplugins/m33_620.prx       InviZimals | Go!Fall
+#Loads plugin only for UMD version of M:AE
+ms0:/seplugins/stargate.prx      (UMD)Motorstorm: Arctic Edge
+#Now paths can be used like normal parameter!
+ms0:/seplugins/stargate.prx      ms0:/ISO/motorstorm.iso | Fat Princess: Fistful of Cake
 
 
 ##PLEASE ERASE THIS FILE AND MAKE YOUR OWN! IT'S ONLY AN EXAMPLE!##

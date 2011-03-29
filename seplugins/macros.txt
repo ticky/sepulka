@@ -1,7 +1,7 @@
 #Sepulka's Macros - Example by C4TurD4Y  #
 ##########################################
 #Structure of Sepulka's macro is very simple, first is game title (w/o spaces,
-#in this example i replaced it with '_' sign for better readabillity), followed
+#in this example I replaced it with '_' sign for better readabillity), followed
 #by a space and macro string. End of macro is new line sign (it can be LF, CRLF or CR).
 #Sepulka can handle up to 256 macros, next ones will be ignored.
 #Macros are case-insensitive, so u can write it as you wish.

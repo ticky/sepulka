@@ -1,5 +1,5 @@
 TARGET = sepulka
-OBJS = main.o libs_lite.o apihook_lite.o sysreg.o
+OBJS = main.o libs_lite.o apihook_lite.o
 
 
 INCDIR =

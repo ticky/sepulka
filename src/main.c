@@ -7,8 +7,10 @@
  *                                                                                       *
  *                                                                     by C4TurD4Y       *
  *                                                                                       *
- *  Sepulka is another selective plugin loader for PlayStation Portable. From 0.3c it's  *
- *  an open source project.                                                              *
+ *   Sepulka is a selective plugin loader for PlayStation Portable. It's inspired by     *
+ *   AtomicDryad's Pergame plugin, but the whole source code of Sepulka is written by    *
+ *   myself. Sepulka has some special abbilities, i.e. CPU speed changing and UMD emu    *
+ *   selecting. Sepulka is an open source project since version 0.3c.                    *
  *                                                                                       *
  *   Copyright (C) 2011 C4TurD4Y                                                         *
  *                                                                                       *
@@ -23,11 +25,11 @@
  *   GNU General Public License for more details.                                        *
  *                                                                                       *
  *   You should have received a copy of the GNU General Public License                   *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>.               *
+ *   along with this program. If not, see <http://www.gnu.org/licenses/>.                *
  *                                                                                       *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  *                                                                                       *
- *   Special macros (useful for logging):                                                                     *
+ *   Useful macros (see more in DEBUG.H header:                                          *
  *   ENABLE_LOGGING     - Enable logging                                                 *
  *   ENABLE_LOGGING_ALL - Log all events                                                 *
  *   LOG_TO_SCREEN      - Enable logging to screen                                       *
@@ -43,24 +45,35 @@
 #include <pspiofilemgr.h>
 #include <pspumd.h>
 #include <psppower.h>
-#include <pspdisplay.h>
-#include <pspdisplay_kernel.h>
 #include <psploadexec_kernel.h>
-#include <pspdebug.h>
 #include <psprtc.h>
+
+//#include "globals.h"
+//#include "debug.h"
 #include "apihook.h"
 #include "systemctrl_se_lite.h"
 
-//#define PSP_GO_SUPPORT
+/* * * * * * * * * * * * * * * * * * *
+ Macros avaiable for debug settings:
+                                     */
+#define ENABLE_LOGGING     // - This one activates all logging functions, w/o this all other macros will be ignored
+//#define ENABLE_LOGGING_ALL // - All debug messages will be displayed
+#define LOG_TO_SCREEN      // - Add possibility to display debug infos on PSP's screen
+#define LOG_TO_FILE        // - Add possibility to save debug infos in file
 
-#define LOG_TO_SCREEN
-#define LOG_TO_FILE
-#define ENABLE_LOGGING
-//#define ENABLE_LOGGING_ALL //Must be defined after ENABLE_LOGGING
+#define LOGFILE_PATH1 "ms0:/log.txt" // Prefered log file
+#define LOGFILE_PATH2 "ef0:/log.txt" // Second log file (PSP Go)
+/* * * * * * * * * * * * * * * * * * */
 
-#define TITLE_STRING "Sepulka v0.7c [PGC Edition] by C4TurD4Y"
+#define ERROR_OK -1
+
+#define RGB(r, v, b)   ((r) | ((v)<<8) | ((b)<<16) | (0xff<<24))
+//#define logWriteMessage logWriteMessage
+
+#define TITLE_STRING "Sepulka v0.8 [EXPERIMENTAL] by C4TurD4Y"
 #define INFO_STRING  "Check out PSP Genesis Competition 2011 at http://wololo.net/genesis/"
-
+#define OK_STRING "LOADED SUCCESSFULLY"
+#define LINE_LENGHT 68
 #define runSepulkaTxt() runModuleList("ms0:/seplugins/sepulka.txt", 0)
 
 #define RML_NORMAL 0
@@ -70,14 +83,16 @@
 #define RML_MACROS 4
 #define RML_SETTIN 6
 
+int target_clock = -1;
+int target_iso = -1;
 int patchClock();
 int unpatchClock();
 
 PSP_MODULE_INFO("sepulka", 0x1000, 1, 0);
 PSP_MAIN_THREAD_ATTR(0);
 
-int sceSysreg_driver_AB3185FD(float cpuclock); //CPU changing
-int sceSysreg_driver_136E8F5A(float busclock); //Bus changing
+//int sceSysreg_driver_AB3185FD(float cpuclock); //CPU changing
+//int sceSysreg_driver_136E8F5A(float busclock); //Bus changing
 
 enum GameModes
 {
@@ -114,7 +129,17 @@ typedef struct
     char   macro[256];
 } Macro;
 
+typedef struct
+{
+    int    loaded;
+    char   path[512];
+} Plugin;
+
 Macro macros[256];
+
+int loaded = 0;
+Plugin plugins[256];
+
 int macros_num = 0;
 
 char path_to_file[4096];
@@ -125,6 +150,10 @@ char * setting_filelog_str   = "filelog";
 char * setting_autosort_str  = "autosort";
 
 char disable_autosort = 0;
+
+int patchedUmdDeactivate (int unit, const char * drive) {return 0;}
+void * oldUmdDeactivate;
+u32 * syscall;
 
 #ifdef ENABLE_LOGGING
 
@@ -139,6 +168,35 @@ char disable_filelog = 1;
 #endif
 
 int log_inited = 0;
+int errors_inited = 0;
+
+///////////////////////////////////////////////////////////////
+int api_errors_num = 3;
+char * api_errors_names[] = {"No such file", //0x8002012E
+                             "No such file", //0x80010002
+                             "Unknown PRX format", //0x80020148
+                             "Required library is missing", //0x8002013C
+                            };
+
+int api_errors_codes[] = {
+                          0x8002012E, //No such file
+                          0x80010002, //No such file
+                          0x80020148, //Unknown PRX format
+                          0x8002013C, //Required library is missing
+                         };
+///////////////////////////////////////////////////////////////
+char * logGetErrorName(int error_code)
+{
+    int x;
+    for (x = 0; x < api_errors_num; x++)
+    {
+        if (api_errors_codes[x] == error_code)
+        {
+            return api_errors_names[x];
+        }
+    }
+    return 0;
+}
 
 void logInit()
 {
@@ -182,20 +240,21 @@ void logInit()
     log_inited = 1;
 
     char text[256];
-    logWrite(TITLE_STRING);
-    logWrite(INFO_STRING);
+    logWriteMessage(TITLE_STRING);
+    logWriteMessage(INFO_STRING);
+    logWriteMessage(path_to_file);
     sprintf(text, "Mode: %s", modes[mode]);
-    logWrite(text);
+    logWriteMessage(text);
     if (mode == isoMode)
     {
         sprintf(text, "Iso driver: %s", isodrvs[isodrv]);
-        logWrite(text);
+        logWriteMessage(text);
     }
     sprintf(text, "Game ID: %s", gameid);
-    logWrite(text);
+    logWriteMessage(text);
     sprintf(text, "Game title: %s", gametitle);
-    logWrite(text);
-    logWrite(" ");
+    logWriteMessage(text);
+    logWriteMessage(" ");
 
     }
     else
@@ -215,7 +274,6 @@ void logInit()
 
 int logWrite(const char * text)
 {
-    //if (log_inited == 0) logInit();
     if (log_inited == 1)
     {
 #ifdef LOG_TO_FILE
@@ -223,14 +281,7 @@ int logWrite(const char * text)
         if (!disable_filelog)
         {
 #endif
-            pspTime time;
-            char data[64];
-            sceRtcGetCurrentClockLocalTime(&time);
-            sprintf(data,"[%.4d/%.2d/%.2d %.2d:%.2d:%.2d] ",time.year,time.month,time.day,time.hour,time.minutes,time.seconds);
-
-            sceIoWrite(logd, data, strlen(data));
             sceIoWrite(logd, text, strlen(text));
-            sceIoWrite(logd, "\x0d\x0a", 2);
 #ifndef ENABLE_LOGGING_ALL
         }
 #endif
@@ -242,6 +293,133 @@ int logWrite(const char * text)
         {
 #endif
             pspDebugScreenKprintf(text);
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+    }
+
+    return 0;
+}
+
+int logWriteData()
+{
+    if (log_inited == 1)
+    {
+#ifdef LOG_TO_FILE
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_filelog)
+        {
+#endif
+            pspTime time;
+            char data[64];
+            sceRtcGetCurrentClockLocalTime(&time);
+            sprintf(data,"[%.4d/%.2d/%.2d %.2d:%.2d:%.2d] ",time.year,time.month,time.day,time.hour,time.minutes,time.seconds);
+            sceIoWrite(logd, data, strlen(data));
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+    }
+
+    return 0;
+}
+
+int logWriteMessage(const char * text)
+{
+    //if (log_inited == 0) logInit();
+    if (log_inited == 1)
+    {
+#ifdef LOG_TO_FILE
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_filelog){
+#endif
+            logWriteData();
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+        logWrite(text);
+#ifdef LOG_TO_FILE
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_filelog){
+#endif
+             sceIoWrite(logd, "\x0d\x0a", 2);
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+
+#ifdef LOG_TO_SCREEN
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_screenlog)
+        {
+#endif
+            pspDebugScreenKprintf("\n");
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+    }
+
+    return 0;
+}
+
+int logWritePluginStatus(const char * path, int error)
+{
+    char text[128];
+    char error_text[64];
+    char * error_name = error_text;
+    char * filename = strrchr(path, '/')+1;
+    if (!filename) filename = path;
+    int x;
+    //if (log_inited == 0) logInit();
+    if (log_inited == 1)
+    {
+        if (error != ERROR_OK)
+        {
+            error_name = logGetErrorName(error);
+            if (!error_name)
+            {
+                error_name = error_text;
+                sprintf(error_text, "0x%08X", error);
+            }
+        }
+        else
+        {
+            sprintf(error_name, OK_STRING);
+        }
+
+        for (x = 0; x < (LINE_LENGHT-(strlen(error_name)+strlen(filename))); x++) text[x] = '.';
+        text[x] = '\0';
+
+#ifdef LOG_TO_FILE
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_filelog)
+        {
+#endif
+            //sceIoWrite(logd, filename, strlen(filename));
+            sceIoWrite(logd, text, strlen(text));
+            sceIoWrite(logd, error_name, strlen(error_name));
+            sceIoWrite(logd, "\x0d\x0a", 2);
+#ifndef ENABLE_LOGGING_ALL
+        }
+#endif
+#endif
+
+#ifdef LOG_TO_SCREEN
+#ifndef ENABLE_LOGGING_ALL
+        if (!disable_screenlog)
+        {
+#endif
+            //pspDebugScreenSetTextColor(RGB(0xFF, 0xFF, 0xFF));
+            //pspDebugScreenKprintf(filename);
+            pspDebugScreenSetTextColor(RGB(0x44, 0x44, 0x44));
+            pspDebugScreenKprintf(text);
+            if (error != ERROR_OK) pspDebugScreenSetTextColor(RGB(0xFF, 0x5F, 0x5F));
+            else pspDebugScreenSetTextColor(RGB(0x8F, 0xFF, 0x8F));
+            pspDebugScreenKprintf(error_name);
+            pspDebugScreenSetTextColor(RGB(0xFF, 0xFF, 0xFF));
             pspDebugScreenKprintf("\n");
 #ifndef ENABLE_LOGGING_ALL
         }
@@ -253,10 +431,6 @@ int logWrite(const char * text)
 }
 
 #endif
-
-int patchedUmdDeactivate (int unit, const char * drive) {return 0;}
-void * oldUmdDeactivate;
-u32 * syscall;
 
 int patchUmd()
 {
@@ -274,8 +448,8 @@ int patchUmd()
         }
     }
     oldUmdDeactivate = libsFindExportByNid(pMod->modid, "sceUmd", 0xE83742BA);
-    syscall = find_syscall_addr(oldUmdDeactivate);
     if(!oldUmdDeactivate) return -2;
+    syscall = find_syscall_addr(oldUmdDeactivate);
     if(apiHookByNid(pMod->modid, "sceUmd",0xE83742BA,patchedUmdDeactivate) == 0) return -3;
     return 0;
 }
@@ -293,7 +467,7 @@ int unpatchUmd()
 }
 
 
-//Thanks Zer01ne and Black dev team for incomplete systemctrl.prx
+//Thanks to Zer01ne and Blackdev team for incomplete systemctrl.prx
 #define MAKE_DUMMY_FUNCTION0(a) _sw(0x03E00008, a); _sw(0x00001021, a+4)
 
 int patchClock()
@@ -308,32 +482,37 @@ int patchClock()
 
     void * hookFunc;
 
+    int errors = 0;
+
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0x737486F2); //scePowerSetClockFrequency
-   MAKE_DUMMY_FUNCTION0((u32)hookFunc);
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
     //else logWrite("Error 1");
 
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0x843FBF43); //scePowerSetCpuClockFrequency
-   MAKE_DUMMY_FUNCTION0((u32)hookFunc);
-    //else logWrite("Error 2");
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
+    //else logWriteMessage("Error 2");
 
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0xB8D7B3FB); //scePowerSetBusClockFrequency
-   MAKE_DUMMY_FUNCTION0((u32)hookFunc);
-    //else logWrite("Error 3");
-
-    sceKernelIcacheInvalidateAll();
-	sceKernelDcacheWritebackInvalidateAll();
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
+    //else logWriteMessage("Error 3");
 
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0x545A7F3C); //scePowerSetClockFrequency mirror (POPS)
-    MAKE_DUMMY_FUNCTION0((u32)hookFunc);
-    //else logWrite("Error 4");
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
+    //else logWriteMessage("Error 4");
 
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0xA4E93389); //scePowerSetClockFrequency mirror
-    MAKE_DUMMY_FUNCTION0((u32)hookFunc);
-    //else logWrite("Error 5");
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
+    //else logWriteMessage("Error 5");
 
     hookFunc = libsFindExportByNid(pMod->modid, "scePower", 0xEBD177D6); //scePowerSetClockFrequency mirror
-     MAKE_DUMMY_FUNCTION0((u32)hookFunc);
-    //else logWrite("Error 6");
+    if (hookFunc) {MAKE_DUMMY_FUNCTION0((u32)hookFunc);}
+    else errors++;
+    //else logWriteMessage("Error 6");
 
 	sceKernelIcacheInvalidateAll();
 	sceKernelDcacheWritebackInvalidateAll();
@@ -341,7 +520,7 @@ int patchClock()
 	pspSdkSetK1(k1);
 
 
-    return 0;
+    return errors;
 }
 
 int changeClock(int cpu_clock)
@@ -361,8 +540,8 @@ int changeClock(int cpu_clock)
 
     scePowerSetClockFrequency(cpu_clock, cpu_clock, bus_clock);
 
-    sceSysreg_driver_AB3185FD(cpu_clock); //CPU changing
-    sceSysreg_driver_136E8F5A(bus_clock); //Bus changing
+    //sceSysreg_driver_AB3185FD(cpu_clock); //CPU changing
+    //sceSysreg_driver_136E8F5A(bus_clock); //Bus changing
 
     //scePowerSetCpuClockFrequency(cpu_clock);
     //scePowerSetBusClockFrequency(bus_clock);
@@ -371,8 +550,8 @@ int changeClock(int cpu_clock)
 #ifdef ENABLE_LOGGING_ALL
     char text[256];
     sprintf(text, "CPU: %d Bus: %d", scePowerGetCpuClockFrequency(), scePowerGetBusClockFrequency());
-    logWrite(text);
-    logWrite(" ");
+    logWriteMessage(text);
+    logWriteMessage(" ");
 #endif
 #endif
 
@@ -497,57 +676,38 @@ void launchIso(int pmode)
     int foo = 0;
 
     int k1;
-/*
-    SEConfig config;
-
-    memset(&config, 0, sizeof(config));
-    sctrlSEGetConfigEx(&config, sizeof(config));*/
-
-    switch (pmode)
-    {
-        case 0:/*
-                k1 = pspSdkSetK1(0);
-                sctrlSESetBootConfFileIndex(0);
-                pspSdkSetK1(k1);
-            break;*/
-
-        case 1:/*
-                k1 = pspSdkSetK1(0);
-                sctrlSESetBootConfFileIndex(1);
-                pspSdkSetK1(k1);
-            break;*/
-
-        case 2:
-                k1 = pspSdkSetK1(0);
-                sctrlSESetBootConfFileIndex(pmode);
-                pspSdkSetK1(k1);
-            break;
-
-        default:
-            return;
-
-        /*case MODE_OE_LEGACY:
-            foo = 1;
-            break;*/
-    }
-
-    /*if (foo)
-    {
-        sctrlSEMountUmdFromFile(path, 1, 1);
-        return;
-    }*/
-
 
     k1 = pspSdkSetK1(0);
     sceUmdDeactivate(1, "disc0:");
     sctrlSEUmountUmd();
     sctrlSESetDiscOut(1);
-    sctrlSESetDiscOut(0);
+    //sctrlSESetDiscOut(0);
+    sctrlSESetDiscType(0x10);
     sctrlSESetUmdFile(path_to_file);
     pspSdkSetK1(k1);
 
-    sctrlKernelLoadExecVSHWithApitype(0x120, "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN", &param);
+    switch (pmode)
+    {
+        case 0:
+        case 1:
+        case 2:
+                k1 = pspSdkSetK1(0);
+                sctrlSESetBootConfFileIndex(pmode);
+                pspSdkSetK1(k1);
+                break;
 
+        default:
+            return;
+
+    }
+
+
+    sceUmdActivate(1, "disc0:");
+    sceUmdWaitDriveStat(UMD_WAITFORINIT);
+
+    sctrlKernelLoadExecVSHDisc("disc0:/PSP_GAME/SYSDIR/EBOOT.BIN", &param);
+
+    sceKernelDelayThread(1000*1000);
     sceKernelSelfStopUnloadModule(1,0,0);
     sceKernelExitDeleteThread(0);
 }
@@ -555,14 +715,18 @@ void launchIso(int pmode)
 SceUID runPrx(const char * path)
 {
     int status;
+#ifdef ENABLE_LOGGING
+    if (log_inited == 0) logInit();
+    logWriteData();
+    logWrite(strrchr(path, '/')+1);
+#endif
     SceUID modid = sceKernelLoadModule(path, 0, NULL);
-    modid = sceKernelStartModule(modid, (strlen(path) + 1), (void *)path, &status, NULL);
+    if (modid < 0x80000000) modid = sceKernelStartModule(modid, (strlen(path) + 1), (void *)path, &status, NULL);
 #ifdef ENABLE_LOGGING
     char text[256];
-    if (log_inited == 0) logInit();
-    if (modid < 0x80000000) sprintf(text, "%s loaded successfully.", strrchr(path,'/')+1);
-    else sprintf(text, "Couldn\'t load %s module. Error 0x%08X", strrchr(path,'/')+1, modid);
-    logWrite(text);
+    if (modid < 0x80000000) logWritePluginStatus(path, ERROR_OK);
+    else logWritePluginStatus(path, modid);
+    //logWriteMessage(text);
 #endif
     return modid;
 
@@ -641,6 +805,7 @@ int runPlugin(const char * path, char * attrs, int pmode)
     char * pch2;
     int arglen = 0;
     int spam = 0;
+    int adv = 0;
     char * cycki = (char *)path;
 
     SceUID modid;
@@ -673,56 +838,54 @@ int runPlugin(const char * path, char * attrs, int pmode)
 
     if (banan == 1)
     {
-        if (pmode == RML_ISODRV)
+        if (strchr(path, ':') != NULL)
         {
-            makeSmall(cycki);
-            knownSignsOnly(cycki);
-            if (!strcmp(isodrvs[isodrv], cycki)) return -2;
-            if (strcmp("normal", cycki) != 0 && strcmp("m33driver", cycki) != 0 && strcmp("np9660", cycki) != 0) return -1;
-#ifdef ENABLE_LOGGING
-            sprintf(text, "Changing iso driver to %s...", cycki);
-            if (log_inited == 0) logInit();
-            logWrite(text);
-            sceKernelDelayThread(1*1000*1000);
-#endif
-            if (!strcmp("normal", cycki)) launchIso(0);
-            if (!strcmp("m33driver", cycki)) launchIso(1);
-            if (!strcmp("np9660", cycki)) launchIso(2);
-        }
-
-        else
-        {if (pmode == RML_GAMPRO)
-        {
-            //logWrite("weszlem1");
-            makeSmall(cycki);
-            knownSignsOnly(cycki);
-            if (!memcmp("cpu",cycki,3))
+            if (loaded < 256)
             {
-                if(strcspn(cycki+3, numbers) == 0){if(strspn(cycki+3, numbers) > 0)
-                {
-                    //logWrite("weszlem2");
-
-                    bar = 0;
-                    bar += (cycki[3]-0x30)*100;
-                    bar += (cycki[4]-0x30)*10;
-                    bar += (cycki[5]-0x30);
-
-                    //modid = sceKernelLoadModule("ms0:/seplugins/sepulka_gp.prx", 0, NULL);
-                    //modid = sceKernelStartModule(modid, 0, NULL, &spam, NULL);
-
-                    changeClock(bar);
-                    patchClock();
-                }}
+                strcpy(plugins[loaded].path, path);
+                plugins[loaded++].loaded = 0;
+                adv = 1;
             }
         }
+        if (adv) return banan;
 
-        else
-
+        makeSmall(cycki);
+        knownSignsOnly(cycki);
+        if (!strcmp(isodrvs[isodrv], cycki)) return -2;
+        if ((strcmp("normal", cycki) == 0 || strcmp("m33driver", cycki) == 0 || strcmp("np9660", cycki) == 0) && !adv)
         {
-            if (runPrx(path) > 0x80000000) banan = -2;
+            if (!strcmp("normal", cycki)) target_iso = 0;
+            if (!strcmp("m33driver", cycki)) target_iso = 1;
+            if (!strcmp("np9660", cycki)) target_iso = 2;
+            adv = 1;
         }
+        if (adv) return banan;
+
+        //logWriteMessage("weszlem1");
+        if (!memcmp("cpu",cycki,3) && !adv)
+        {
+            if(strcspn(cycki+3, numbers) == 0){if(strspn(cycki+3, numbers) > 0)
+            {
+                //logWriteMessage("weszlem2");
+
+                bar = 0;
+                bar += (cycki[3]-0x30)*100;
+                bar += (cycki[4]-0x30)*10;
+                bar += (cycki[5]-0x30);
+
+                //modid = sceKernelLoadModule("ms0:/seplugins/sepulka_gp.prx", 0, NULL);
+                //modid = sceKernelStartModule(modid, 0, NULL, &spam, NULL);
+
+                target_clock = bar;
+                adv = 1;
+            }}
         }
-    };
+        if (adv) return banan;
+
+
+        if (!adv) return -2;
+    }
+
     return banan;
 }
 
@@ -762,11 +925,13 @@ int runModuleList(const char * path, int pmode)
 #endif
     char line[4096];
     char args[2048];
+    //char args2[2048];
     char ppath[2048];
+    //char ppath2[2048];
 #ifdef ENABLE_LOGGING
 #ifdef ENABLE_LOGGING_ALL
     sprintf(line, "Analizing %s file...", path);
-    logWrite(line);
+    logWriteMessage(line);
 #endif
 #endif
     memset(&fstat, 0, sizeof(SceIoStat));
@@ -785,10 +950,12 @@ int runModuleList(const char * path, int pmode)
     int x = 0;
     int loaded = 0;
 
+    int adv = 0;
+
     while (sceIoRead(fd, &c, 1) != 0)
     {
         if (c == 0x0d || c == 0x0a || c == 0x20) continue;
-        if (c == 0x23) {mud = 1; continue;}
+        if (c == 0x23) {mud = 1;}
         else sceIoLseek(fd, -1, SEEK_CUR);
         memset(line, 0, sizeof(line));
         memset(ppath, 0, sizeof(ppath));
@@ -797,6 +964,8 @@ int runModuleList(const char * path, int pmode)
         spam = 0;
 
         pch = line;
+
+        adv = 0;
 
         if (mud == 0)
         {
@@ -808,21 +977,39 @@ int runModuleList(const char * path, int pmode)
                     pch2 = strchr(pch+1, 0x20);
                     if (pch2 - pch > 1) break;
                     if (pch2 == NULL) break;
+                    /*while (pch[0] == 0x20) pch++;
+                    pch2 = pch;
+                    pch = ppath;
+                    while (pch2[0] != 0x20)
+                    {
+                        pch[0] = pch2[0];
+                        pch++;
+                        pch2++;
+                    }
+                    while*/
                 }
 
                 if (pch2 - pch <= 0) continue;
 
-                strncpy(ppath, pch, pch2 - pch);
+                strncpy(ppath,  pch, pch2 - pch);
+                //strncpy(ppath2, pch, pch2 - pch);
                 while(pch2[0] == 0x20) pch2++;
                 strncpy(args,  pch2, strlen(pch)-(pch2 - pch));
 
+                //strncpy(args2, pch2, strlen(pch)-(pch2 - pch));
+
                 switch (pmode)
                 {
-                    case RML_ISODRV:
+                    case RML_NORMAL:
+                        /*if (strchr(ppath, ':') != NULL) if(runPlugin(ppath, args, pmode) == 1) loaded++;
+                        break;*/
                     case RML_GAMPRO:
+                    case RML_ISODRV:
                         runPlugin(ppath, args, pmode);
-                        break;
                     case RML_SETTIN:
+                        /*strncpy(ppath2, ppath, strlen(ppath));
+                        strncpy(args2, args, strlen(args));*/
+
                         makeSmall(ppath);
                         makeSmall(args);
                         knownSignsOnly(ppath);
@@ -831,32 +1018,36 @@ int runModuleList(const char * path, int pmode)
 ///////////////////////// >
 //                     //
 #ifdef LOG_TO_SCREEN
-                        if ((!strcmp(ppath, setting_screenlog_str)) && (!strcmp(args, onoff_str[0]))) disable_screenlog = 0;
-                        if ((!strcmp(ppath, setting_screenlog_str)) && (!strcmp(args, onoff_str[1]))) disable_screenlog = 1;
+                        if ((!strcmp(ppath, setting_screenlog_str)) && (!strcmp(args, onoff_str[0]))) {disable_screenlog = 0; adv = 1;}
+                        if ((!strcmp(ppath, setting_screenlog_str)) && (!strcmp(args, onoff_str[1]))) {disable_screenlog = 1; adv = 1;}
 #endif
 #ifdef LOG_TO_FILE
-                        if ((!strcmp(ppath, setting_filelog_str)) && (!strcmp(args, onoff_str[0]))) disable_filelog = 0;
-                        if ((!strcmp(ppath, setting_filelog_str)) && (!strcmp(args, onoff_str[1]))) disable_filelog = 1;
+                        if ((!strcmp(ppath, setting_filelog_str)) && (!strcmp(args, onoff_str[0]))) {disable_filelog = 0; adv = 1;}
+                        if ((!strcmp(ppath, setting_filelog_str)) && (!strcmp(args, onoff_str[1]))) {disable_filelog = 1; adv = 1;}
 #endif
-                        if ((!strcmp(ppath, setting_autosort_str)) && (!strcmp(args, onoff_str[0]))) disable_autosort = 0;
-                        if ((!strcmp(ppath, setting_autosort_str)) && (!strcmp(args, onoff_str[1]))) disable_autosort = 1;
+                        if ((!strcmp(ppath, setting_autosort_str)) && (!strcmp(args, onoff_str[0]))) {disable_autosort = 0; adv = 1;}
+                        if ((!strcmp(ppath, setting_autosort_str)) && (!strcmp(args, onoff_str[1]))) {disable_autosort = 1; adv = 1;}
 
                         break;
+
+                    /*case RML_ISODRV:
+                    case RML_GAMPRO:
+                        runPlugin(ppath2, args2, pmode);
+                        break;*/
+
                     case RML_MACROS:
                         if (macros_num < 256)
                         {
                             strncpy(macros[macros_num].name, ppath, 256);
                             strncpy(macros[macros_num].macro, args, 256);
                             makeSmall(macros[macros_num].name);
-                            makeSmall(macros[macros_num].macro);
                             knownSignsOnly(macros[macros_num].name);
+                            if ((strcmp(gametitle, macros[macros_num].name) != 0) && (strcmp(gameid, macros[macros_num].name) != 0)) break;
+                            makeSmall(macros[macros_num].macro);
                             knownSignsOnly(macros[macros_num].macro);
 
                             macros_num++;
                         }
-                        break;
-                    case RML_NORMAL:
-                        if (strchr(ppath, ':') != NULL) if(runPlugin(ppath, args, pmode) == 1) loaded++;
                         break;
                 }
             }
@@ -929,7 +1120,7 @@ int getMacros()
 #ifdef ENABLE_LOGGING_ALL
     char text[64];
     sprintf (text, "%d macros read.", foo);
-    logWrite(text);
+    logWriteMessage(text);
 #endif
 #endif
 
@@ -1044,41 +1235,28 @@ char * getLocalModsListName(char * path)
 
 int startup(SceSize args, void *argp)
 {
+    char text[256];
 #ifdef ENABLE_LOGGING
 #ifdef ENABLE_LOGGING_ALL
-    char text[256];
     logInit();
 #endif
 #endif
 
-    runModuleList("ms0:/seplugins/sepulka.txt", RML_SETTIN);
-
-    changeTimeStamp();
-
     getMacros();
 
-/*#ifdef ENABLE_LOGGING
-    if (!disable_filelog)
+    runModuleList("ms0:/seplugins/sepulka.txt", RML_GAMPRO);
+
+    if (target_iso >= 0 && mode == isoMode)
     {
-        while (!sceKernelFindModuleByName ("sceKernelLibrary"))
-        {
-            sceKernelDelayThread (150000);
-        }
-
-        pspDebugScreenInitEx (0x44000000, 0, 0);
-        unsigned int uiAddress = 0;
-        unsigned int uiBufferWidth = 0;
-        unsigned int uiPixelFormat = 0;
-        unsigned int uiSync = 0;
-        sceDisplayGetFrameBufferInternal (0, &uiAddress, &uiBufferWidth, &uiPixelFormat, &uiSync);
-        sceDisplayGetMode (&uiPixelFormat, &uiBufferWidth, &uiBufferWidth);
-        pspDebugScreenSetColorMode (uiPixelFormat);
-        pspDebugScreenSetXY (0, 0);
-        pspDebugScreenSetTextColor (0xFF0000FF);
+#ifdef ENABLE_LOGGING
+        sprintf(text, "Changing iso driver to %s...", isodrvs[target_iso+1]);
+        if (log_inited == 0) logInit();
+        logWriteMessage(text);
+        if (log_inited) logInit();
+        sceKernelDelayThread(1*1000*1000);
+#endif
+        launchIso(target_iso);
     }
-#endif*/
-
-    if (mode == isoMode) runModuleList("ms0:/seplugins/sepulka.txt", RML_ISODRV);
 
     int foo = patchUmd();
 
@@ -1086,21 +1264,29 @@ int startup(SceSize args, void *argp)
 #ifdef ENABLE_LOGGING_ALL
     if (foo == 0) sprintf(text, "sceUmdDeactivate patched successfully!");
     else sprintf(text, "Couldn\'t patch sceUmdDeactivate. Error %i.", foo);
-    logWrite(text);
-    logWrite(" ");
+    logWriteMessage(text);
+    logWriteMessage(" ");
 #endif
 #endif
     //Run main loadlist
-    foo = runSepulkaTxt();
+    //foo = runSepulkaTxt();
+    for(;loaded > 0; loaded--)
+    {
+        runPrx(plugins[loaded-1].path);
+        plugins[loaded-1].loaded = 1;
+    }
+
 #ifdef ENABLE_LOGGING
 #ifdef ENABLE_LOGGING_ALL
         if (foo < 0) sprintf(text, "Couldn\'t open main list. Error %i.", foo);
         if (foo == 1) sprintf(text, "1 plugin was loaded.");
         if (foo > 1 || foo == 0) sprintf(text, "%d plugins were loaded.", foo);
-        logWrite(text);
-        logWrite(" ");
+        logWriteMessage(text);
+        logWriteMessage(" ");
 #endif
 #endif
+
+    changeTimeStamp();
 
     if (mode != unkMode || mode != umdMode)
     {
@@ -1111,8 +1297,8 @@ int startup(SceSize args, void *argp)
         if (foo == 1) sprintf(text, "1 plugin was loaded.");
         if (foo > 1) sprintf(text, "%d plugins were loaded.", foo);
         if (foo == 0) sprintf(text, "List is empty.");
-        logWrite(text);
-        logWrite(" ");
+        logWriteMessage(text);
+        logWriteMessage(" ");
 #endif
 #endif
     }
@@ -1124,22 +1310,28 @@ int startup(SceSize args, void *argp)
 #ifdef ENABLE_LOGGING_ALL
     if (foo == 0) sprintf(text, "sceUmdDeactivate unpatched successfully!");
     else sprintf(text, "Couldn\'t unpatch sceUmdDeactivate. Error %i.", foo);
-    logWrite(" ");
-    logWrite(text);
+    logWriteMessage(" ");
+    logWriteMessage(text);
 
     //sceKernelDelayThread(2*1000*1000);
 
 #endif
-    logWrite(" ");
-    logWrite("Exiting Sepulka...");
-    logWrite("Have a nice play :)");
+    logWriteMessage(" ");
+    logWriteMessage("Exiting Sepulka...");
+    logWriteMessage("Have a nice play :)");
     if (log_inited) logInit();
 #endif
 
 //#ifdef ENABLE_LOGGING_ALL
     sceKernelDelayThread(10*1000*1000);
-    runModuleList("ms0:/seplugins/sepulka.txt", RML_GAMPRO);
+    //runModuleList("ms0:/seplugins/sepulka.txt", RML_GAMPRO);
     //sprintf(text, "CPU: %d Bus: %d", scePowerGetCpuClockFrequency(), scePowerGetBusClockFrequency());
+
+    if (target_clock >= 0)
+    {
+        changeClock(target_clock);
+        patchClock();
+    }
 
     int ret;
 
@@ -1160,7 +1352,7 @@ int module_start(SceSize args, void *argp)
 
     int thid = 0;
 
-    thid = sceKernelCreateThread("Sepulka", startup, 0x10, 0x4000, 0, NULL);
+    thid = sceKernelCreateThread("Sepulka", startup, 0x10, 0x4000, PSP_THREAD_ATTR_CLEAR_STACK , NULL);
     if(thid >= 0) {
             sceKernelStartThread(thid, 0, 0);
     }

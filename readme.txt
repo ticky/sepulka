@@ -1,11 +1,12 @@
 ==================================================================
 This Homebrew is an entry for the PSP Genesis competition 2011,
 sponsored by npt, psp-hacks.com, pspgen.com, pspslimhacks.com,
-exophase.com, pspcustomfirmware.com, daxhordes.org, and wololo.net
+exophase.com, pspcustomfirmware.com, daxhordes.org, gamegaz.jp, 
+and wololo.net
 ==================================================================
 
 C4TurD4Y presents:
-Selective Plugin Loader: SEPULKA v0.7b PGC Edition
+Selective Plugin Loader: SEPULKA v0.8 [EXPERIMENTAL] PGC Edition
 
 BEFORE YOU START USING SEPULKA, MAKE SURE THAT ISO DRIVER IS M33 OR NP9660 AND CPU SPEED IS SET TO DEFAULT
 
